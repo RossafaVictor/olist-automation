@@ -1,4 +1,4 @@
-name: Olist - Baixar Custos E-commerce
+name: Olist - Baixar Custos e Enviar para Google Sheets
 
 on:
   schedule:
@@ -12,9 +12,9 @@ on:
         default: ''
 
 jobs:
-  baixar-custos:
+  baixar-e-upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -35,17 +35,34 @@ jobs:
         working-directory: scripts
         run: npx playwright install chromium --with-deps
 
+      - name: Definir mês alvo
+        id: mes
+        run: |
+          if [ -n "${{ github.event.inputs.mes }}" ]; then
+            echo "valor=${{ github.event.inputs.mes }}" >> $GITHUB_OUTPUT
+          else
+            echo "valor=$(date +'%m/%Y')" >> $GITHUB_OUTPUT
+          fi
+
       - name: Baixar relatório Olist
         working-directory: scripts
         env:
           OLIST_EMAIL: ${{ secrets.OLIST_EMAIL }}
           OLIST_PASSWORD: ${{ secrets.OLIST_PASSWORD }}
+        run: node baixar-custos.js "${{ steps.mes.outputs.valor }}"
+
+      - name: Enviar para Google Sheets
+        working-directory: scripts
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          if [ -n "${{ github.event.inputs.mes }}" ]; then
-            node baixar-custos.js "${{ github.event.inputs.mes }}"
-          else
-            node baixar-custos.js
-          fi
+          MES="${{ steps.mes.outputs.valor }}"
+          MES_NUM=$(echo $MES | cut -d'/' -f1)
+          ANO=$(echo $MES | cut -d'/' -f2)
+          MESES=("" "Janeiro" "Fevereiro" "Março" "Abril" "Maio" "Junho" "Julho" "Agosto" "Setembro" "Outubro" "Novembro" "Dezembro")
+          MES_NOME="${MESES[$((10#$MES_NUM))]} $ANO"
+          XLS_FILE="downloads/custos de ecommerce ${MES_NOME}.xls"
+          node upload-sheets.js "${XLS_FILE}" "${MES}"
 
       - name: Upload screenshot de erro (se houver)
         if: failure()
@@ -53,11 +70,3 @@ jobs:
         with:
           name: screenshot-erro
           path: /tmp/olist_erro.png
-
-      - name: Upload arquivo XLS
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: custos-olist
-          path: scripts/downloads/*.xls
-          retention-days: 90
