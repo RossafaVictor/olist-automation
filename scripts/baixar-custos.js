@@ -121,9 +121,11 @@ async function run() {
     console.log(`[OK] Arquivo salvo: ${destFile}`);
     console.log(`[OK] Tamanho: ${(stats.size / 1024).toFixed(1)} KB`);
 
-    // Retorna o caminho do arquivo para uso posterior (ex: Google Sheets)
-    console.log(`::set-output name=arquivo::${destFile}`);
-    console.log(`::set-output name=mesNome::${mesNome}`);
+    // Exporta variáveis para outros steps do GitHub Actions
+    if (process.env.GITHUB_OUTPUT) {
+      const fs2 = require('fs');
+      fs2.appendFileSync(process.env.GITHUB_OUTPUT, `arquivo=${destFile}\nmesNome=${mesNome}\n`);
+    }
 
   } catch (err) {
     console.error('[ERRO]', err.message);
