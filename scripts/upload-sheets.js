@@ -74,17 +74,19 @@ async function uploadToSheets(xlsPath, mesAno) {
   return tabName;
 }
 
-// Execução direta
-const xlsPath = process.argv[2];
-const mesAno = process.argv[3];
-
-if (!xlsPath || !mesAno) {
-  console.error('[ERRO] Uso: node upload-sheets.js <caminho.xls> <MM/AAAA>');
-  process.exit(1);
-}
-
-uploadToSheets(xlsPath, mesAno)
-  .then(tab => console.log(`[OK] Concluído: ${tab}`))
-  .catch(err => { console.error('[ERRO]', err.message); process.exit(1); });
-
 module.exports = { uploadToSheets };
+
+// Execução direta via CLI
+if (require.main === module) {
+  const xlsPath = process.argv[2];
+  const mesAno = process.argv[3];
+
+  if (!xlsPath || !mesAno) {
+    console.error('[ERRO] Uso: node upload-sheets.js <caminho.xls> <MM/AAAA>');
+    process.exit(1);
+  }
+
+  uploadToSheets(xlsPath, mesAno)
+    .then(tab => console.log(`[OK] Concluído: ${tab}`))
+    .catch(err => { console.error('[ERRO]', err.message); process.exit(1); });
+}
