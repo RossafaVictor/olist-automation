@@ -1,0 +1,72 @@
+name: Olist - Fechar Mês Anterior (todo dia 1)
+
+on:
+  schedule:
+    # Todo dia 1 do mês às 10h BRT (13h UTC)
+    - cron: '0 13 1 * *'
+  workflow_dispatch:
+
+jobs:
+  mes-anterior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Instalar dependências
+        working-directory: scripts
+        run: npm install
+
+      - name: Instalar navegadores Playwright
+        working-directory: scripts
+        run: npx playwright install chromium --with-deps
+
+      - name: Calcular mês anterior
+        id: mes
+        run: |
+          ANO=$(date +'%Y')
+          MES=$(date +'%m')
+          if [ "$MES" = "01" ]; then
+            MES="12"
+            ANO=$((ANO - 1))
+          else
+            MES=$(printf '%02d' $((10#$MES - 1)))
+          fi
+          echo "valor=${MES}/${ANO}" >> $GITHUB_OUTPUT
+          echo "Mês anterior: ${MES}/${ANO}"
+
+      - name: Baixar relatório do mês anterior
+        working-directory: scripts
+        env:
+          OLIST_EMAIL: ${{ secrets.OLIST_EMAIL }}
+          OLIST_PASSWORD: ${{ secrets.OLIST_PASSWORD }}
+        run: node baixar-custos.js "${{ steps.mes.outputs.valor }}"
+
+      - name: Enviar para Google Sheets
+        working-directory: scripts
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          MES="${{ steps.mes.outputs.valor }}"
+          MES_NUM=$(echo $MES | cut -d'/' -f1)
+          ANO=$(echo $MES | cut -d'/' -f2)
+          MESES=("" "Janeiro" "Fevereiro" "Março" "Abril" "Maio" "Junho" "Julho" "Agosto" "Setembro" "Outubro" "Novembro" "Dezembro")
+          MES_NOME="${MESES[$((10#$MES_NUM))]} $ANO"
+          XLS_FILE="downloads/custos de ecommerce ${MES_NOME}.xls"
+          node upload-sheets.js "${XLS_FILE}" "${MES}"
+
+      - name: Upload screenshot de erro (se houver)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-erro-mes-anterior
+          path: /tmp/olist_erro.png
