@@ -40,12 +40,32 @@ async function uploadToSheets(xlsPath, mesAno) {
   const abaExistente = spreadsheet.data.sheets.find(s => s.properties.title === tabName);
 
   if (abaExistente) {
-    // Limpar aba existente
-    console.log(`[INFO] Aba "${tabName}" já existe — limpando...`);
-    await sheets.spreadsheets.values.clear({
+    // Verificar quantas linhas existem atualmente na aba
+    const atual = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${tabName}!A:ZZ`,
+      range: `${tabName}!A:A`,
     });
+    const linhasAtuais = (atual.data.values || []).length;
+
+    // 1. Escrever novos dados por cima (sem apagar — Power BI nunca vê vazio)
+    console.log(`[INFO] Aba "${tabName}" existe com ${linhasAtuais} linhas — sobrescrevendo...`);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: rows },
+    });
+
+    // 2. Apagar resquícios abaixo dos novos dados (se havia mais linhas antes)
+    if (linhasAtuais > rows.length) {
+      const linhaInicio = rows.length + 1;
+      const linhaFim = linhasAtuais;
+      console.log(`[INFO] Limpando resquícios das linhas ${linhaInicio} a ${linhaFim}...`);
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: SHEET_ID,
+        range: `${tabName}!A${linhaInicio}:ZZ${linhaFim}`,
+      });
+    }
   } else {
     // Criar nova aba
     console.log(`[INFO] Criando aba "${tabName}"...`);
@@ -59,18 +79,17 @@ async function uploadToSheets(xlsPath, mesAno) {
         }]
       }
     });
+
+    // Escrever dados na aba recém-criada
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: rows },
+    });
   }
 
-  // Escrever dados
-  console.log(`[INFO] Escrevendo ${rows.length} linhas na aba "${tabName}"...`);
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID,
-    range: `${tabName}!A1`,
-    valueInputOption: 'RAW',
-    requestBody: { values: rows },
-  });
-
-  console.log(`[OK] Dados enviados para a aba "${tabName}" com sucesso!`);
+  console.log(`[OK] ${rows.length} linhas escritas na aba "${tabName}" com sucesso!`);
   return tabName;
 }
 
