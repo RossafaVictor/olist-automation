@@ -1,0 +1,63 @@
+name: Olist - Baixar Custos E-commerce
+
+on:
+  schedule:
+    # Toda segunda-feira às 09h (horário de Brasília = 12h UTC)
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: 'Mês/Ano (MM/AAAA) — deixe vazio para o mês atual'
+        required: false
+        default: ''
+
+jobs:
+  baixar-custos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: scripts/package.json
+
+      - name: Instalar dependências
+        working-directory: scripts
+        run: npm install
+
+      - name: Instalar navegadores Playwright
+        working-directory: scripts
+        run: npx playwright install chromium --with-deps
+
+      - name: Baixar relatório Olist
+        working-directory: scripts
+        env:
+          OLIST_EMAIL: ${{ secrets.OLIST_EMAIL }}
+          OLIST_PASSWORD: ${{ secrets.OLIST_PASSWORD }}
+        run: |
+          if [ -n "${{ github.event.inputs.mes }}" ]; then
+            node baixar-custos.js "${{ github.event.inputs.mes }}"
+          else
+            node baixar-custos.js
+          fi
+
+      - name: Upload screenshot de erro (se houver)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-erro
+          path: /tmp/olist_erro.png
+
+      - name: Upload arquivo XLS
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custos-olist
+          path: scripts/downloads/*.xls
+          retention-days: 90

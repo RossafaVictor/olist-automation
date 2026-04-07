@@ -1,0 +1,14 @@
+{
+  "name": "olist-automation-scripts",
+  "version": "1.0.0",
+  "description": "Scripts de automação Olist",
+  "main": "baixar-custos.js",
+  "scripts": {
+    "baixar": "node baixar-custos.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
