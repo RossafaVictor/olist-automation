@@ -2,8 +2,8 @@ name: Olist - Baixar Custos e Enviar para Google Sheets
 
 on:
   schedule:
-    # Toda segunda-feira às 09h (horário de Brasília = 12h UTC)
-    - cron: '0 12 * * 1'
+    # A cada hora das 07h às 19h (horário de Brasília = 10h às 22h UTC), todos os dias
+    - cron: '0 10-22 * * *'
   workflow_dispatch:
     inputs:
       mes:
