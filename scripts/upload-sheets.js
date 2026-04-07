@@ -90,7 +90,47 @@ async function uploadToSheets(xlsPath, mesAno) {
   }
 
   console.log(`[OK] ${rows.length} linhas escritas na aba "${tabName}" com sucesso!`);
+
+  // Atualizar aba de log com a última atualização
+  await atualizarLog(sheets, tabName, rows.length);
+
   return tabName;
+}
+
+async function atualizarLog(sheets, tabName, totalLinhas) {
+  const LOG_ABA = 'Última Atualização';
+
+  // Horário de Brasília
+  const agora = new Date();
+  const horaBRT = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).format(agora);
+
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const logExiste = spreadsheet.data.sheets.find(s => s.properties.title === LOG_ABA);
+
+  if (!logExiste) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: LOG_ABA, index: 0 } } }] }
+    });
+  }
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${LOG_ABA}!A1`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [
+        ['Mês Atualizado', 'Data/Hora (BRT)', 'Total de Linhas'],
+        [tabName, horaBRT, totalLinhas]
+      ]
+    }
+  });
+
+  console.log(`[OK] Log atualizado: ${tabName} às ${horaBRT}`);
 }
 
 module.exports = { uploadToSheets };
