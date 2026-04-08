@@ -1,11 +1,13 @@
-name: Olist - Fechar Mês Anterior (dias 1, 6 e 10)
+name: Olist - Fechar Mês Anterior (dias 1, 5, 10, 15)
 
 on:
   schedule:
-    # Dias 1, 6 e 10 de cada mês às 10h BRT (13h UTC)
-    - cron: '0 13 1 * *'
-    - cron: '0 13 6 * *'
-    - cron: '0 13 10 * *'
+    # Dias 1, 5, 10, 15 — 5 horários BRT: 06h, 09h, 12h, 15h, 18h (UTC+3)
+    - cron: '0 9 1,5,10,15 * *'
+    - cron: '0 12 1,5,10,15 * *'
+    - cron: '0 15 1,5,10,15 * *'
+    - cron: '0 18 1,5,10,15 * *'
+    - cron: '0 21 1,5,10,15 * *'
   workflow_dispatch:
 
 jobs:
