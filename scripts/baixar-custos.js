@@ -106,12 +106,33 @@ async function run() {
     console.log('[INFO] Aguardando relatório carregar (10s)...');
     await page.waitForTimeout(10000);
 
+    // Screenshot antes do download para debug
+    await page.screenshot({ path: '/tmp/olist_pre_download.png' });
+    console.log('[INFO] Screenshot pré-download salvo');
+
+    // Listar links/botões visíveis para debug
+    const links = await page.locator('a, button').all();
+    for (let i = 0; i < Math.min(links.length, 20); i++) {
+      const txt = await links[i].textContent().catch(() => '');
+      const href = await links[i].getAttribute('href').catch(() => '');
+      if (txt.trim() || href) console.log(`  Elemento[${i}]: "${txt.trim()}" href=${href}`);
+    }
+
     console.log('[INFO] Iniciando download...');
     const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 30000 }),
-      page.click('a:has-text("download"), button:has-text("download"), a[href*="download"], .btn-download').catch(() =>
-        page.click('a:has-text("Download"), button:has-text("Download")')
-      )
+      page.waitForEvent('download', { timeout: 60000 }),
+      page.click('a:has-text("download"), button:has-text("download"), a[href*="download"], .btn-download, a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), a:has-text("XLS"), a:has-text("Excel")').catch(async () => {
+        // Última tentativa: clicar em qualquer link que pareça download
+        const allLinks = await page.locator('a[href]').all();
+        for (const link of allLinks) {
+          const href = await link.getAttribute('href').catch(() => '');
+          if (href && (href.includes('xls') || href.includes('download') || href.includes('export'))) {
+            console.log('[INFO] Link de download encontrado via href:', href);
+            await link.click();
+            return;
+          }
+        }
+      })
     ]);
 
     console.log('[INFO] Download iniciado:', download.suggestedFilename());

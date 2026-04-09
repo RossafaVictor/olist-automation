@@ -63,9 +63,9 @@ jobs:
           XLS_FILE="downloads/custos de ecommerce ${MES_NOME}.xls"
           node upload-sheets.js "${XLS_FILE}" "${MES}"
 
-      - name: Upload screenshot de erro (se houver)
+      - name: Upload screenshots de erro (se houver)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot-erro
-          path: /tmp/olist_erro.png
+          name: screenshots-erro
+          path: /tmp/olist_*.png
