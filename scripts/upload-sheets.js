@@ -133,7 +133,7 @@ async function atualizarLog(sheets, tabName, totalLinhas) {
   console.log(`[OK] Log atualizado: ${tabName} às ${horaBRT}`);
 }
 
-module.exports = { uploadToSheets };
+module.exports = { uploadToSheets, withRetry };
 
 async function withRetry(fn, maxRetries = 3, delayMs = 4000) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

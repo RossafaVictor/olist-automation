@@ -5,7 +5,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { uploadToSheets } = require('./upload-sheets');
+const { uploadToSheets, withRetry } = require('./upload-sheets');
 
 const MESES_INICIO = { mes: '01', ano: 2026 };
 
@@ -60,7 +60,7 @@ async function run() {
 
     // Upload para Sheets
     try {
-      await uploadToSheets(filePath, mesAno);
+      await withRetry(() => uploadToSheets(filePath, mesAno), 3, 4000);
     } catch (err) {
       console.error(`[ERRO] Falha ao fazer upload ${mesAno}:`, err.message);
     }
