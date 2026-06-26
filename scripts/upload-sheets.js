@@ -1,3 +1,10 @@
+// Node.js 24 usa HTTP/2 via undici para o fetch nativo, mas o endpoint OAuth do Google
+// fecha a conexão antecipadamente sobre HTTP/2 ("Premature close"). Força HTTP/1.1.
+try {
+  const { setGlobalDispatcher, Agent } = require('node:undici');
+  setGlobalDispatcher(new Agent({ connect: { allowH2: false } }));
+} catch (_) {}
+
 const { google } = require('googleapis');
 const XLSX = require('xlsx');
 const fs = require('fs');
