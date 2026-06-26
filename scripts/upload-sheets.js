@@ -1,3 +1,10 @@
+// Fix GitHub Actions: gaxios usa node-fetch (falha com "Premature close").
+// Native fetch (undici) funciona. Gaxios escolhe window.fetch se window existir.
+// Definir global.window = global faz gaxios usar globalThis.fetch (nativo).
+if (typeof globalThis.fetch !== 'undefined') {
+  global.window = global;
+}
+
 const { google } = require('googleapis');
 const XLSX = require('xlsx');
 const fs = require('fs');
