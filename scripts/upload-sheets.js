@@ -1,9 +1,8 @@
-// Node.js 24 usa HTTP/2 via undici para o fetch nativo, mas o endpoint OAuth do Google
-// fecha a conexão antecipadamente sobre HTTP/2 ("Premature close"). Força HTTP/1.1.
-try {
-  const { setGlobalDispatcher, Agent } = require('node:undici');
-  setGlobalDispatcher(new Agent({ connect: { allowH2: false } }));
-} catch (_) {}
+// Fix Node.js 24: gaxios (usado pelo googleapis) detecta globalThis.fetch e usa
+// undici/HTTP2, que falha com "Premature close" no OAuth do Google.
+// Substitui pelo node-fetch (HTTP/1.1 puro) diretamente na instância do gaxios.
+const gaxios = require('gaxios');
+gaxios.instance.defaults.fetchImplementation = require('node-fetch');
 
 const { google } = require('googleapis');
 const XLSX = require('xlsx');

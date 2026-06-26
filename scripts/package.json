@@ -12,6 +12,8 @@
   "dependencies": {
     "playwright": "^1.59.1",
     "googleapis": "^144.0.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "node-fetch": "^2.7.0",
+    "gaxios": "^6.0.0"
   }
 }
