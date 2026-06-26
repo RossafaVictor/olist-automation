@@ -44,29 +44,6 @@ jobs:
             echo "valor=$(date +'%m/%Y')" >> $GITHUB_OUTPUT
           fi
 
-      - name: Diagnóstico Google OAuth
-        working-directory: scripts
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: |
-          echo "=== node-fetch direto ==="
-          node -e "
-          const fetch = require('node-fetch');
-          fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=test'
-          }).then(r => r.text()).then(t => console.log('OK HTTP:', t.slice(0,80))).catch(e => console.log('ERRO node-fetch:', e.message));
-          " || true
-          echo "=== native globalThis.fetch ==="
-          node -e "
-          globalThis.fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=test'
-          }).then(r => r.text()).then(t => console.log('OK HTTP:', t.slice(0,80))).catch(e => console.log('ERRO native-fetch:', e.message));
-          " || true
-
       - name: Baixar relatório Olist
         working-directory: scripts
         env:
