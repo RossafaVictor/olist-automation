@@ -44,6 +44,20 @@ jobs:
             echo "valor=$(date +'%m/%Y')" >> $GITHUB_OUTPUT
           fi
 
+      - name: Diagnóstico Google OAuth
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          echo "=== Teste curl: conectividade com oauth2.googleapis.com ==="
+          curl -s -o /tmp/curl_out.txt -w "HTTP_STATUS:%{http_code} TIME:%{time_total}s" \
+            -X POST https://oauth2.googleapis.com/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=diagnostico" || true
+          cat /tmp/curl_out.txt | head -3
+          echo ""
+          echo "=== Credencial: tipo ==="
+          echo "$GOOGLE_CREDENTIALS" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log('type:', d.type); console.log('project_id:', d.project_id); console.log('client_email:', d.client_email); console.log('key_id:', d.private_key_id);" 2>/dev/null || echo "[AVISO] Falha ao ler GOOGLE_CREDENTIALS"
+
       - name: Baixar relatório Olist
         working-directory: scripts
         env:
