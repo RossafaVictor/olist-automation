@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Scripts de automação Olist",
   "scripts": {
+    "postinstall": "node patch-gtoken.js",
     "baixar": "node baixar-custos.js",
     "upload": "node upload-sheets.js",
     "backfill": "node backfill.js"

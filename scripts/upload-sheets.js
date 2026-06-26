@@ -1,12 +1,3 @@
-// Fix Node.js 24: substitui globalThis.fetch (undici/HTTP2) por node-fetch (HTTP/1.1).
-// O endpoint OAuth do Google falha com "Premature close" sobre HTTP/2.
-// Deve ser feito ANTES de qualquer require de googleapis/gaxios/google-auth-library.
-const nodeFetch = require('node-fetch');
-global.fetch = nodeFetch;
-global.Headers = nodeFetch.Headers;
-global.Request = nodeFetch.Request;
-global.Response = nodeFetch.Response;
-
 const { google } = require('googleapis');
 const XLSX = require('xlsx');
 const fs = require('fs');
