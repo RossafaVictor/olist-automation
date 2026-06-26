@@ -45,28 +45,26 @@ jobs:
           fi
 
       - name: Diagnóstico Google OAuth
+        working-directory: scripts
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          echo "=== Node.js version ==="
-          node --version
-          echo "=== window definido? ==="
-          node -e "console.log('typeof window:', typeof window); console.log('window.fetch?', typeof globalThis.fetch);"
-          echo "=== Teste Node.js https.request direto ==="
+          echo "=== node-fetch direto ==="
           node -e "
-          const https = require('https');
-          const req = https.request('https://oauth2.googleapis.com/token', {
+          const fetch = require('node-fetch');
+          fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'}
-          }, (res) => {
-            let d = '';
-            res.on('data', c => d += c);
-            res.on('end', () => console.log('OK HTTP', res.statusCode, d.slice(0,60)));
-            res.on('error', e => console.log('BODY ERR', e.message));
-          });
-          req.on('error', e => console.log('REQ ERR', e.message));
-          req.write('grant_type=test&assertion=test');
-          req.end();
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=test'
+          }).then(r => r.text()).then(t => console.log('OK HTTP:', t.slice(0,80))).catch(e => console.log('ERRO node-fetch:', e.message));
+          " || true
+          echo "=== native globalThis.fetch ==="
+          node -e "
+          globalThis.fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=test'
+          }).then(r => r.text()).then(t => console.log('OK HTTP:', t.slice(0,80))).catch(e => console.log('ERRO native-fetch:', e.message));
           " || true
 
       - name: Baixar relatório Olist
