@@ -103,20 +103,20 @@ async function run() {
 
     console.log('[INFO] Clicando em Gerar...');
     await page.click('button:has-text("Gerar"), input[value="Gerar"]');
-    console.log('[INFO] Aguardando relatório carregar (10s)...');
-    await page.waitForTimeout(10000);
+
+    // Aguarda o botão de download aparecer (relatório pronto), até 90s
+    console.log('[INFO] Aguardando botão de download aparecer (máx 90s)...');
+    const SELETOR_DOWNLOAD = 'a:has-text("download"), button:has-text("download"), a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), .btn-download';
+    try {
+      await page.waitForSelector(SELETOR_DOWNLOAD, { timeout: 90000 });
+      console.log('[INFO] Botão de download visível — relatório pronto');
+    } catch (e) {
+      console.log('[AVISO] Botão não encontrado em 90s, tentando assim mesmo...');
+    }
 
     // Screenshot antes do download para debug
     await page.screenshot({ path: '/tmp/olist_pre_download.png' });
     console.log('[INFO] Screenshot pré-download salvo');
-
-    // Listar links/botões visíveis para debug
-    const links = await page.locator('a, button').all();
-    for (let i = 0; i < Math.min(links.length, 20); i++) {
-      const txt = await links[i].textContent().catch(() => '');
-      const href = await links[i].getAttribute('href').catch(() => '');
-      if (txt.trim() || href) console.log(`  Elemento[${i}]: "${txt.trim()}" href=${href}`);
-    }
 
     console.log('[INFO] Iniciando download...');
     const [download] = await Promise.all([
