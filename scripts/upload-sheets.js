@@ -135,6 +135,28 @@ async function atualizarLog(sheets, tabName, totalLinhas) {
 
 module.exports = { uploadToSheets };
 
+async function withRetry(fn, maxRetries = 3, delayMs = 4000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isNetwork = err.message && (
+        err.message.includes('Premature close') ||
+        err.message.includes('ECONNRESET') ||
+        err.message.includes('ETIMEDOUT') ||
+        err.message.includes('ENOTFOUND') ||
+        err.message.includes('socket hang up')
+      );
+      if (isNetwork && attempt < maxRetries) {
+        console.log(`[AVISO] Tentativa ${attempt}/${maxRetries} falhou (${err.message}). Aguardando ${delayMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 // Execução direta via CLI
 if (require.main === module) {
   const xlsPath = process.argv[2];
@@ -145,7 +167,7 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  uploadToSheets(xlsPath, mesAno)
+  withRetry(() => uploadToSheets(xlsPath, mesAno), 3, 4000)
     .then(tab => console.log(`[OK] Concluído: ${tab}`))
     .catch(err => { console.error('[ERRO]', err.message); process.exit(1); });
 }
