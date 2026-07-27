@@ -11,9 +11,60 @@ const MESES = {
 const OLIST_EMAIL = process.env.OLIST_EMAIL;
 const OLIST_PASSWORD = process.env.OLIST_PASSWORD;
 
+const URL_RELATORIO = 'https://erp.olist.com/relatorio_custos_ecommerce';
+
+// O ERP da Olist falha de forma intermitente ao gerar o relatório, devolvendo
+// "Ocorreu um erro ao executar a consulta. Tente novamente mais tarde."
+// Nesse caso não adianta esperar: é preciso recarregar a página e gerar de novo.
+const MAX_TENTATIVAS = 4;
+const ESPERA_ENTRE_TENTATIVAS_MS = 15000;
+
+const SELETOR_DOWNLOAD = 'a:has-text("download"), button:has-text("download"), a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), .btn-download';
+const TEXTO_ERRO_CONSULTA = 'Ocorreu um erro ao executar a consulta';
+
 if (!OLIST_EMAIL || !OLIST_PASSWORD) {
   console.error('[ERRO] Variáveis OLIST_EMAIL e OLIST_PASSWORD são obrigatórias');
   process.exit(1);
+}
+
+// Preenche o mês e clica em Gerar. Retorna 'pronto' (botão de download visível),
+// 'erro-consulta' (falha intermitente do ERP) ou 'timeout'.
+async function gerarRelatorio(page, mesAno) {
+  const inputMesSeletores = [
+    'input[placeholder*="mês"], input[placeholder*="mes"], input[placeholder*="Mês"]',
+    'input[name*="mes"], input[name*="month"], input[name*="periodo"]',
+    'input[type="month"]',
+    'input.datepicker, input.mes, input[class*="mes"]',
+    'input[type="text"]'
+  ];
+
+  let inputMes = null;
+  for (const sel of inputMesSeletores) {
+    const count = await page.locator(sel).count();
+    if (count > 0) {
+      console.log(`[INFO] Campo de mês encontrado com: ${sel}`);
+      inputMes = page.locator(sel).first();
+      break;
+    }
+  }
+
+  if (!inputMes) throw new Error('Campo de mês não encontrado na página');
+
+  await inputMes.click({ clickCount: 3 });
+  await inputMes.fill(mesAno);
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(1000);
+
+  console.log('[INFO] Clicando em Gerar...');
+  await page.click('button:has-text("Gerar"), input[value="Gerar"]');
+
+  // Corre o botão de download contra a mensagem de erro do ERP — o que vier primeiro
+  console.log('[INFO] Aguardando relatório ficar pronto (máx 90s)...');
+  return Promise.race([
+    page.waitForSelector(SELETOR_DOWNLOAD, { timeout: 90000 }).then(() => 'pronto'),
+    page.getByText(TEXTO_ERRO_CONSULTA).first()
+      .waitFor({ state: 'visible', timeout: 90000 }).then(() => 'erro-consulta')
+  ]).catch(() => 'timeout');
 }
 
 async function run() {
@@ -76,47 +127,44 @@ async function run() {
     await page.screenshot({ path: '/tmp/olist_relatorio.png' });
     await page.waitForTimeout(3000);
 
-    const inputMesSeletores = [
-      'input[placeholder*="mês"], input[placeholder*="mes"], input[placeholder*="Mês"]',
-      'input[name*="mes"], input[name*="month"], input[name*="periodo"]',
-      'input[type="month"]',
-      'input.datepicker, input.mes, input[class*="mes"]',
-      'input[type="text"]'
-    ];
+    let resultado = null;
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      console.log(`[INFO] Tentativa ${tentativa}/${MAX_TENTATIVAS} de gerar o relatório`);
 
-    let inputMes = null;
-    for (const sel of inputMesSeletores) {
-      const count = await page.locator(sel).count();
-      if (count > 0) {
-        console.log(`[INFO] Campo de mês encontrado com: ${sel}`);
-        inputMes = page.locator(sel).first();
+      if (tentativa > 1) {
+        await page.goto(URL_RELATORIO, { waitUntil: 'networkidle', timeout: 30000 });
+        await page.waitForTimeout(3000);
+      }
+
+      resultado = await gerarRelatorio(page, mesAno);
+
+      if (resultado === 'pronto') {
+        console.log('[INFO] Botão de download visível — relatório pronto');
         break;
       }
-    }
 
-    if (!inputMes) throw new Error('Campo de mês não encontrado na página');
+      if (resultado === 'erro-consulta') {
+        console.log('[AVISO] ERP retornou "erro ao executar a consulta" (falha intermitente da Olist)');
+      } else {
+        console.log('[AVISO] Nem botão de download nem mensagem de erro apareceram em 90s');
+      }
 
-    await inputMes.click({ clickCount: 3 });
-    await inputMes.fill(mesAno);
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(1000);
-
-    console.log('[INFO] Clicando em Gerar...');
-    await page.click('button:has-text("Gerar"), input[value="Gerar"]');
-
-    // Aguarda o botão de download aparecer (relatório pronto), até 90s
-    console.log('[INFO] Aguardando botão de download aparecer (máx 90s)...');
-    const SELETOR_DOWNLOAD = 'a:has-text("download"), button:has-text("download"), a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), .btn-download';
-    try {
-      await page.waitForSelector(SELETOR_DOWNLOAD, { timeout: 90000 });
-      console.log('[INFO] Botão de download visível — relatório pronto');
-    } catch (e) {
-      console.log('[AVISO] Botão não encontrado em 90s, tentando assim mesmo...');
+      if (tentativa < MAX_TENTATIVAS) {
+        console.log(`[INFO] Aguardando ${ESPERA_ENTRE_TENTATIVAS_MS / 1000}s antes de tentar de novo...`);
+        await page.waitForTimeout(ESPERA_ENTRE_TENTATIVAS_MS);
+      }
     }
 
     // Screenshot antes do download para debug
     await page.screenshot({ path: '/tmp/olist_pre_download.png' });
     console.log('[INFO] Screenshot pré-download salvo');
+
+    if (resultado !== 'pronto') {
+      throw new Error(
+        `Relatório não ficou pronto após ${MAX_TENTATIVAS} tentativas (último estado: ${resultado}). ` +
+        'O ERP da Olist está instável — tente novamente mais tarde.'
+      );
+    }
 
     console.log('[INFO] Iniciando download...');
     const [download] = await Promise.all([
