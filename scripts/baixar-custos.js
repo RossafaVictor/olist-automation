@@ -27,21 +27,63 @@ if (!OLIST_EMAIL || !OLIST_PASSWORD) {
   process.exit(1);
 }
 
-// O menu lateral do ERP abre no hover e fica por cima da coluna esquerda do
-// formulário — justamente onde está o campo de período. Como o mouse do
-// Playwright nasce em (0,0), ou seja, em cima da barra lateral, o menu abre
-// sozinho e o campo nunca fica clicável. Afasta o mouse e fecha o flyout.
-async function afastarMenuLateral(page) {
+// O menu lateral do ERP está com "Fixar menu" ligado na conta: fica
+// permanentemente aberto e sobrepõe a coluna esquerda do formulário — onde
+// estão o campo de período e o botão Gerar. Como está *fixado*, afastar o
+// mouse ou apertar Escape não fecha. Afasta o mouse (fecha flyout de hover,
+// se houver) e some com o overlay via CSS, sem alterar a preferência da conta.
+async function neutralizarMenuLateral(page) {
   const { width, height } = page.viewportSize() || { width: 1920, height: 1080 };
   await page.mouse.move(Math.floor(width * 0.75), Math.floor(height * 0.5));
   await page.keyboard.press('Escape').catch(() => {});
+
+  // Esconde qualquer elemento fixo/absoluto que esteja cobrindo a área do
+  // formulário. Identifica pelo hit-test em vez de chutar nomes de classe.
+  const escondidos = await page.evaluate(() => {
+    const alvos = new Set();
+    // Pontos da faixa esquerda do conteúdo, onde o menu se sobrepõe
+    for (let y = 150; y <= 600; y += 50) {
+      for (let x = 80; x <= 400; x += 40) {
+        let el = document.elementFromPoint(x, y);
+        while (el && el !== document.body) {
+          const pos = getComputedStyle(el).position;
+          if (pos === 'fixed' || pos === 'absolute') {
+            const r = el.getBoundingClientRect();
+            // Só o que é alto e estreito (cara de menu lateral)
+            if (r.height > 400 && r.width < 600 && r.left < 400) {
+              alvos.add(el);
+              break;
+            }
+          }
+          el = el.parentElement;
+        }
+      }
+    }
+    alvos.forEach(el => { el.style.display = 'none'; });
+    return alvos.size;
+  }).catch(() => 0);
+
+  if (escondidos > 0) {
+    console.log(`[INFO] Menu lateral neutralizado (${escondidos} elemento(s) sobrepostos ocultados)`);
+  }
   await page.waitForTimeout(500);
+}
+
+// Clica sem depender de coordenadas: se o elemento estiver coberto por um
+// overlay, o click normal expira — aí dispara o evento direto no elemento.
+async function clicarRobusto(page, locator, descricao) {
+  try {
+    await locator.click({ timeout: 10000 });
+  } catch (e) {
+    console.log(`[AVISO] Click normal em "${descricao}" falhou (elemento coberto). Usando dispatchEvent...`);
+    await locator.dispatchEvent('click');
+  }
 }
 
 // Preenche o mês e clica em Gerar. Retorna 'pronto' (botão de download visível),
 // 'erro-consulta' (falha intermitente do ERP) ou 'timeout'.
 async function gerarRelatorio(page, mesAno) {
-  await afastarMenuLateral(page);
+  await neutralizarMenuLateral(page);
 
   const inputMesSeletores = [
     'input[placeholder*="mês"], input[placeholder*="mes"], input[placeholder*="Mês"]',
@@ -63,22 +105,15 @@ async function gerarRelatorio(page, mesAno) {
 
   if (!inputMes) throw new Error('Campo de mês não encontrado na página');
 
-  // Se o menu ainda estiver por cima, o click normal expira. Reafasta e, em
-  // último caso, clica ignorando a checagem de sobreposição.
-  try {
-    await inputMes.click({ clickCount: 3, timeout: 15000 });
-  } catch (e) {
-    console.log('[AVISO] Campo de mês bloqueado (menu lateral por cima?). Reafastando o menu...');
-    await afastarMenuLateral(page);
-    await inputMes.click({ clickCount: 3, timeout: 15000, force: true });
-  }
+  // fill() não faz hit-test, então funciona mesmo se algo estiver por cima —
+  // e já limpa o campo sozinho, dispensando o clique triplo de seleção.
   await inputMes.fill(mesAno);
   await page.keyboard.press('Tab');
   await page.waitForTimeout(1000);
 
   console.log('[INFO] Clicando em Gerar...');
-  await afastarMenuLateral(page);
-  await page.click('button:has-text("Gerar"), input[value="Gerar"]', { timeout: 15000 });
+  const btnGerar = page.locator('button:has-text("Gerar"), input[value="Gerar"]').first();
+  await clicarRobusto(page, btnGerar, 'Gerar');
 
   // Corre o botão de download contra a mensagem de erro do ERP — o que vier primeiro
   console.log('[INFO] Aguardando relatório ficar pronto (máx 90s)...');
@@ -192,9 +227,14 @@ async function run() {
     }
 
     console.log('[INFO] Iniciando download...');
+    await neutralizarMenuLateral(page);
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 60000 }),
-      page.click('a:has-text("download"), button:has-text("download"), a[href*="download"], .btn-download, a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), a:has-text("XLS"), a:has-text("Excel")').catch(async () => {
+      clicarRobusto(
+        page,
+        page.locator('a:has-text("download"), button:has-text("download"), a[href*="download"], .btn-download, a:has-text("Download"), button:has-text("Download"), a:has-text("Exportar"), button:has-text("Exportar"), a:has-text("XLS"), a:has-text("Excel")').first(),
+        'download'
+      ).catch(async () => {
         // Última tentativa: clicar em qualquer link que pareça download
         const allLinks = await page.locator('a[href]').all();
         for (const link of allLinks) {
