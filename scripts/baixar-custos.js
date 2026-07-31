@@ -27,9 +27,22 @@ if (!OLIST_EMAIL || !OLIST_PASSWORD) {
   process.exit(1);
 }
 
+// O menu lateral do ERP abre no hover e fica por cima da coluna esquerda do
+// formulário — justamente onde está o campo de período. Como o mouse do
+// Playwright nasce em (0,0), ou seja, em cima da barra lateral, o menu abre
+// sozinho e o campo nunca fica clicável. Afasta o mouse e fecha o flyout.
+async function afastarMenuLateral(page) {
+  const { width, height } = page.viewportSize() || { width: 1920, height: 1080 };
+  await page.mouse.move(Math.floor(width * 0.75), Math.floor(height * 0.5));
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.waitForTimeout(500);
+}
+
 // Preenche o mês e clica em Gerar. Retorna 'pronto' (botão de download visível),
 // 'erro-consulta' (falha intermitente do ERP) ou 'timeout'.
 async function gerarRelatorio(page, mesAno) {
+  await afastarMenuLateral(page);
+
   const inputMesSeletores = [
     'input[placeholder*="mês"], input[placeholder*="mes"], input[placeholder*="Mês"]',
     'input[name*="mes"], input[name*="month"], input[name*="periodo"]',
@@ -50,13 +63,22 @@ async function gerarRelatorio(page, mesAno) {
 
   if (!inputMes) throw new Error('Campo de mês não encontrado na página');
 
-  await inputMes.click({ clickCount: 3 });
+  // Se o menu ainda estiver por cima, o click normal expira. Reafasta e, em
+  // último caso, clica ignorando a checagem de sobreposição.
+  try {
+    await inputMes.click({ clickCount: 3, timeout: 15000 });
+  } catch (e) {
+    console.log('[AVISO] Campo de mês bloqueado (menu lateral por cima?). Reafastando o menu...');
+    await afastarMenuLateral(page);
+    await inputMes.click({ clickCount: 3, timeout: 15000, force: true });
+  }
   await inputMes.fill(mesAno);
   await page.keyboard.press('Tab');
   await page.waitForTimeout(1000);
 
   console.log('[INFO] Clicando em Gerar...');
-  await page.click('button:has-text("Gerar"), input[value="Gerar"]');
+  await afastarMenuLateral(page);
+  await page.click('button:has-text("Gerar"), input[value="Gerar"]', { timeout: 15000 });
 
   // Corre o botão de download contra a mensagem de erro do ERP — o que vier primeiro
   console.log('[INFO] Aguardando relatório ficar pronto (máx 90s)...');
@@ -94,6 +116,9 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     acceptDownloads: true,
+    // Viewport largo: com 1280px o menu lateral expandido cobre a coluna
+    // esquerda do formulário (onde fica o campo de período).
+    viewport: { width: 1920, height: 1080 },
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
   });
   const page = await context.newPage();

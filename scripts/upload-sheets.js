@@ -27,6 +27,38 @@ async function getAuth() {
   return auth;
 }
 
+// Uma aba do Sheets tem grade de tamanho fixo. Se o relatório crescer além
+// dela, o update falha com "exceeds grid limits". Cresce a grade antes.
+async function garantirEspaco(sheets, aba, linhasNecessarias, colunasNecessarias) {
+  const grid = aba.properties.gridProperties || {};
+  const linhasAtuais = grid.rowCount || 0;
+  const colunasAtuais = grid.columnCount || 0;
+
+  // Folga de 100 linhas para não redimensionar a cada execução
+  const novasLinhas = linhasNecessarias > linhasAtuais ? linhasNecessarias + 100 : linhasAtuais;
+  const novasColunas = colunasNecessarias > colunasAtuais ? colunasNecessarias + 5 : colunasAtuais;
+
+  if (novasLinhas === linhasAtuais && novasColunas === colunasAtuais) return;
+
+  console.log(
+    `[INFO] Expandindo grade da aba: ${linhasAtuais}x${colunasAtuais} → ${novasLinhas}x${novasColunas}`
+  );
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      requests: [{
+        updateSheetProperties: {
+          properties: {
+            sheetId: aba.properties.sheetId,
+            gridProperties: { rowCount: novasLinhas, columnCount: novasColunas }
+          },
+          fields: 'gridProperties.rowCount,gridProperties.columnCount'
+        }
+      }]
+    }
+  });
+}
+
 async function uploadToSheets(xlsPath, mesAno) {
   const [mes, ano] = mesAno.split('/');
   const tabName = `${MESES[mes]} ${ano}`;
@@ -46,6 +78,8 @@ async function uploadToSheets(xlsPath, mesAno) {
   const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
   const abaExistente = spreadsheet.data.sheets.find(s => s.properties.title === tabName);
 
+  const maxColunas = rows.reduce((max, r) => Math.max(max, r.length), 0);
+
   if (abaExistente) {
     // Verificar quantas linhas existem atualmente na aba
     const atual = await sheets.spreadsheets.values.get({
@@ -53,6 +87,9 @@ async function uploadToSheets(xlsPath, mesAno) {
       range: `${tabName}!A:A`,
     });
     const linhasAtuais = (atual.data.values || []).length;
+
+    // Garantir que a grade comporta os novos dados
+    await garantirEspaco(sheets, abaExistente, rows.length, maxColunas);
 
     // 1. Escrever novos dados por cima (sem apagar — Power BI nunca vê vazio)
     console.log(`[INFO] Aba "${tabName}" existe com ${linhasAtuais} linhas — sobrescrevendo...`);
@@ -81,7 +118,14 @@ async function uploadToSheets(xlsPath, mesAno) {
       requestBody: {
         requests: [{
           addSheet: {
-            properties: { title: tabName }
+            properties: {
+              title: tabName,
+              // Já nasce com espaço de sobra para os dados do mês
+              gridProperties: {
+                rowCount: rows.length + 100,
+                columnCount: Math.max(maxColunas + 5, 26)
+              }
+            }
           }
         }]
       }
