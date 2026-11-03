@@ -8,6 +8,12 @@ on:
         required: false
         default: ''
 
+# Todos os workflows usam a mesma conta do Olist: se rodarem juntos, o login
+# de um derruba a sessão do outro. A fila única faz o segundo esperar.
+concurrency:
+  group: olist-erp
+  cancel-in-progress: false
+
 jobs:
   baixar-e-upload:
     runs-on: ubuntu-latest

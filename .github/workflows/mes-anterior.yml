@@ -10,6 +10,12 @@ on:
     - cron: '0 21 1,5,10,15 * *'
   workflow_dispatch:
 
+# Todos os workflows usam a mesma conta do Olist: se rodarem juntos, o login
+# de um derruba a sessão do outro. A fila única faz o segundo esperar.
+concurrency:
+  group: olist-erp
+  cancel-in-progress: false
+
 jobs:
   mes-anterior:
     runs-on: ubuntu-latest

@@ -3,6 +3,12 @@ name: Olist - Backfill Histórico (Jan/2026 até hoje)
 on:
   workflow_dispatch:
 
+# Todos os workflows usam a mesma conta do Olist: se rodarem juntos, o login
+# de um derruba a sessão do outro. A fila única faz o segundo esperar.
+concurrency:
+  group: olist-erp
+  cancel-in-progress: false
+
 jobs:
   backfill:
     runs-on: ubuntu-latest
