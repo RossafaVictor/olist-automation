@@ -27,6 +27,72 @@ if (!OLIST_EMAIL || !OLIST_PASSWORD) {
   process.exit(1);
 }
 
+const SELETOR_USUARIO = 'input[name="username"], #username';
+const SELETOR_SENHA = 'input[name="password"], #password';
+const TENTATIVAS_LOGIN = 3;
+
+function naTelaDeLogin(url) {
+  return url.includes('accounts.tiny.com.br') || url.includes('login');
+}
+
+// Abre o ERP e, se cair na tela de login, autentica.
+// - A página de login às vezes carrega em branco (SPA que não renderiza):
+//   recarrega e tenta de novo em vez de desistir no primeiro timeout.
+// - Se a Olist exigir troca de senha ("Escolha sua nova senha"), não há o que
+//   o robô possa fazer: falha na hora com uma mensagem clara.
+async function fazerLogin(page) {
+  for (let tentativa = 1; tentativa <= TENTATIVAS_LOGIN; tentativa++) {
+    console.log(`[INFO] Acessando Olist ERP... (tentativa ${tentativa}/${TENTATIVAS_LOGIN})`);
+    await page.goto(URL_RELATORIO, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(e => {
+      console.log('[AVISO] goto:', e.message.split('\n')[0]);
+    });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+
+    if (!naTelaDeLogin(page.url())) {
+      console.log('[INFO] Sessão já autenticada. URL:', page.url());
+      return;
+    }
+
+    const campoUsuario = page.locator(SELETOR_USUARIO).first();
+    const apareceu = await campoUsuario.waitFor({ state: 'visible', timeout: 30000 }).then(() => true, () => false);
+    if (!apareceu) {
+      console.log('[AVISO] Tela de login não renderizou o formulário (página em branco). Recarregando...');
+      await page.screenshot({ path: `/tmp/olist_login_vazio_${tentativa}.png` }).catch(() => {});
+      continue;
+    }
+
+    console.log('[INFO] Tela de login detectada. Fazendo login...');
+    await campoUsuario.fill(OLIST_EMAIL);
+    await page.locator(SELETOR_SENHA).first().fill(OLIST_PASSWORD);
+    await page.click('input[type="submit"], button[type="submit"]');
+
+    // Espera o que vier primeiro: sair da tela de login ou a Olist pedir troca de senha
+    const resultado = await Promise.race([
+      page.waitForURL(url => !naTelaDeLogin(url.toString()), { timeout: 45000 }).then(() => 'ok'),
+      page.getByText(/Escolha sua nova senha|Redefinir senha/i).first()
+        .waitFor({ state: 'visible', timeout: 45000 }).then(() => 'trocar_senha'),
+    ]).catch(() => 'timeout');
+
+    if (resultado === 'trocar_senha') {
+      throw new Error(
+        'A Olist está exigindo TROCA DE SENHA para esta conta ("Escolha sua nova senha"). ' +
+        'Entre no ERP manualmente com OLIST_EMAIL, defina a nova senha e atualize o secret ' +
+        'OLIST_PASSWORD no GitHub. O robô não troca a senha sozinho.'
+      );
+    }
+    if (resultado === 'timeout') {
+      await page.screenshot({ path: `/tmp/olist_login_timeout_${tentativa}.png` }).catch(() => {});
+      console.log('[AVISO] Login não concluiu em 45s. URL:', page.url());
+      continue;
+    }
+
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+    console.log('[INFO] Login realizado. URL atual:', page.url());
+    return;
+  }
+  throw new Error(`Não foi possível fazer login na Olist após ${TENTATIVAS_LOGIN} tentativas (veja os screenshots).`);
+}
+
 // O menu lateral do ERP está com "Fixar menu" ligado na conta: fica
 // permanentemente aberto e sobrepõe a coluna esquerda do formulário — onde
 // estão o campo de período e o botão Gerar. Como está *fixado*, afastar o
@@ -159,17 +225,7 @@ async function run() {
   const page = await context.newPage();
 
   try {
-    console.log('[INFO] Acessando Olist ERP...');
-    await page.goto('https://erp.olist.com/relatorio_custos_ecommerce', { waitUntil: 'networkidle', timeout: 30000 });
-
-    if (page.url().includes('accounts.tiny.com.br') || page.url().includes('login')) {
-      console.log('[INFO] Tela de login detectada. Fazendo login...');
-      await page.fill('input[name="username"], #username', OLIST_EMAIL);
-      await page.fill('input[name="password"], #password', OLIST_PASSWORD);
-      await page.click('input[type="submit"], button[type="submit"]');
-      await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 });
-      console.log('[INFO] Login realizado. URL atual:', page.url());
-    }
+    await fazerLogin(page);
 
     const bodyText = await page.textContent('body').catch(() => '');
     if (bodyText.includes('outro dispositivo') || bodyText.includes('sessão expirou')) {
